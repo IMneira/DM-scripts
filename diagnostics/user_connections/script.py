@@ -1,49 +1,41 @@
-
 from collections import Counter
-import getpass
-import paramiko
+import subprocess
+from diagnostics.allowed_users import users  # Importa la lista de usuarios permitidos
 
 def obtener_usuarios_conectados():
-    print("Introduce los datos del servidor remoto:")
-    host = input("Host/IP: ")
-    user = input("Usuario: ")
-    password = getpass.getpass("Contraseña: ")
-
-    ssh = paramiko.SSHClient()
-    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    try:
-        ssh.connect(host, username=user, password=password)
-        stdin, stdout, stderr = ssh.exec_command('w -h')
-        salida = stdout.read().decode()
-        ssh.close()
-    except Exception as e:
-        print(f"Error de conexión SSH: {e}")
-        return [], Counter()
-
-    usuarios = []
-    actividades = Counter()
-    for linea in salida.splitlines():
-        partes = linea.split()
-        if len(partes) >= 5:
-            usuario = partes[0]
-            actividad = partes[4]  # Comando principal
-            usuarios.append(usuario)
-            actividades[(usuario, actividad)] += 1
-    return usuarios, actividades
+    # Usar ps para obtener la mayor información posible de cada proceso de usuario
+    resultado = subprocess.run([
+        'ps', '-eo', 'user,pid,tty,stime,etime,comm,args', '--sort=user'
+    ], capture_output=True, text=True)
+    procesos = []
+    for linea in resultado.stdout.splitlines()[1:]:  # Saltar encabezado
+        partes = linea.split(None, 6)  # Solo 6 splits, el resto es args
+        if len(partes) >= 7:
+            usuario, pid, tty, stime, etime, comm, args = partes
+            procesos.append({
+                'usuario': usuario,
+                'pid': pid,
+                'tty': tty,
+                'inicio': stime,
+                'tiempo': etime,
+                'comando': comm,
+                'args': args
+            })
+    return procesos
 
 def imprimir_resumen_usuarios():
-    usuarios, actividades = obtener_usuarios_conectados()
-    usuarios_unicos = set(usuarios)
-    print(f"Usuarios conectados: {', '.join(usuarios_unicos)}\n")
+    # Usa la lista importada de usuarios permitidos
+    usuarios_permitidos = users
+    procesos = obtener_usuarios_conectados()
+    usuarios_unicos = sorted(set(p['usuario'] for p in procesos))
+    print(f"Usuarios conectados y cantidad de procesos activos:\n")
+    # Revisar usuarios no permitidos
+    usuarios_no_permitidos = [u for u in usuarios_unicos if u not in usuarios_permitidos]
+    if usuarios_no_permitidos:
+        print("\033[91m[ALERTA] Usuarios NO permitidos detectados: {}\033[0m".format(', '.join(usuarios_no_permitidos)))
     for usuario in usuarios_unicos:
-        print(f"Usuario: {usuario}")
-        acciones = [(act, count) for (usr, act), count in actividades.items() if usr == usuario]
-        total_acciones = sum(count for _, count in acciones)
-        print(f"  Sesiones activas: {total_acciones}")
-        print("  Acciones/procesos principales:")
-        for accion, count in acciones:
-            print(f"    {accion}: {count}")
-        print()
+        procesos_usuario = [p for p in procesos if p['usuario'] == usuario]
+        print(f"Usuario: {usuario} | Procesos activos: {len(procesos_usuario)}")
 
 if __name__ == "__main__":
     imprimir_resumen_usuarios()
