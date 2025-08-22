@@ -1,0 +1,1 @@
+users = ["root", "humberto", "colord", "cups-browsed", "systemd+", "syslog", "systemd-resolve", "systemd-timesync", "messagebus", "polkitd", "systemd-oom"]  # <-- Cambia estos por los usuarios válidos
