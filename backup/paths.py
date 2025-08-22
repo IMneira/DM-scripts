@@ -1,0 +1,1 @@
+paths = ["C:/Users/benja/OneDrive/CTFs/DM-scripts/xd.txt"]
